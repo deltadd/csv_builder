@@ -1,6 +1,9 @@
 # encoding: utf-8
 
 module CsvBuilder # :nodoc:
+  
+  BOM = "\377\376" # Start characters for UTF-16LE
+  
   # Template handler for csv templates
   #
   # Add rows to your CSV file in the template by pushing arrays of columns into csv
@@ -23,12 +26,6 @@ module CsvBuilder # :nodoc:
   #
   #   @output_encoding = 'UTF-8'
 
-  if defined?(Rails) and Rails.version < '3'
-    class TemplateHandler < ActionView::Template::Handler
-      include ActionView::Template::Handlers::Compilable
-    end
-  end
-  
   # The ruby csv class will try to infer a separator to use, if the csv options
   # do not set it. ruby's csv calls pos, eof?, read, and rewind to check the first line
   # of the io to infer a separator. Rails' output object does not support these methods
@@ -81,7 +78,7 @@ module CsvBuilder # :nodoc:
     
     def each
       yielder = CsvBuilder::Yielder.new(Proc.new{|data| yield data})
-      csv_stream = CsvBuilder::CSV_LIB.new(yielder, @csv_options || {}) 
+      csv_stream = CSV.new(yielder, @csv_options || {}) 
       csv = CsvBuilder::TransliteratingFilter.new(csv_stream, @input_encoding || 'UTF-8', @output_encoding || 'LATIN1')
       @template_proc.call(csv)
     end
@@ -113,11 +110,21 @@ module CsvBuilder # :nodoc:
             #{template.source}
           }
           CsvBuilder::Streamer.new(template)
-        else 
-          output = CsvBuilder::CSV_LIB.generate(@csv_options || {}) do |faster_csv|
+        else
+          output = CSV.generate(@csv_options || {}) do |faster_csv|
             csv = CsvBuilder::TransliteratingFilter.new(faster_csv, @input_encoding || 'UTF-8', @output_encoding || 'LATIN1')
             #{template.source}
           end
+
+          @output_encoding ||= 'UTF-8'
+          output.force_encoding('UTF-8')
+          if @output_encoding == 'UTF-16LE'
+            bom = String.new(CsvBuilder::BOM)
+            output = bom.force_encoding(@output_encoding) + output.encode(@output_encoding)
+          else
+            output = output.encode(@output_encoding)
+          end
+
           output
         end
       rescue Exception => e

@@ -25,7 +25,7 @@ class CsvBuilderReportsController < ApplicationController
 
   def encoding
     respond_to do |format|
-      format.csv { @output_encoding = 'UTF-16' }
+      format.csv { @output_encoding = 'UTF-16LE' }
     end
   end
   
@@ -63,7 +63,10 @@ describe CsvBuilderReportsController do
   describe "Layout with options" do
     it "sets output encoding correctly" do
       get 'encoding', :format => 'csv'
-      correct_output = generate({}, [Iconv.iconv('UTF-16//TRANSLIT//IGNORE', 'UTF-8', 'ąčęėįšųūž')])
+
+      bom = String.new(CsvBuilder::BOM)
+      correct_output = bom.force_encoding('UTF-16LE') + "ąčęėįšųūž\n".encode('UTF-16LE')
+
       response.body.to_s.should == correct_output
     end
 
